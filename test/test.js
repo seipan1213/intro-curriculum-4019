@@ -6,6 +6,7 @@ const User = require('../models/user');
 const Schedule = require('../models/schedule');
 const Candidate = require('../models/candidate');
 const Availability = require('../models/availability');
+const assert = require('assert');
 
 describe('/login', () => {
   before(() => {
@@ -72,12 +73,20 @@ describe('/schedules', () => {
             .expect(/テスト候補2/)
             .expect(/テスト候補3/)
             .expect(200)
-            .end((err, res) => { deleteScheduleAggregate(createdSchedulePath.split('/schedules/')[1], done, err); });
+            .end((err, res) => {
+              Availability.findAll({
+                where: { scheduleId: scheduleId }
+              }).then((availabilities) => {
+                assert.equal(availabilities.length,1);
+                assert.equal(availabilities[0].availabilities,2);
+                deleteScheduleAggregate(scheduleId, done, err);
+              });
+            });
         });
     });
   });
-});
 
+});
 describe('/schedules/:scheduleId/users/:userId/candidates/:candidateId', () => {
   before(() => {
     passportStub.install(app);
@@ -101,8 +110,9 @@ describe('/schedules/:scheduleId/users/:userId/candidates/:candidateId', () => {
             where: { scheduleId: scheduleId }
           }).then((candidate) => {
             // 更新がされることをテスト
+            const userId = 0;
             request(app)
-              .post(`/schedules/${scheduleId}/users/${0}/candidates/${candidate.candidateId}`)
+              .post(`/schedules/${scheduleId}/users/${userId}/candidates/${candidate.candidateId}`)
               .send({ availability: 2 }) // 出席に更新
               .expect('{"status":"OK","availability":2}')
               .end((err, res) => { deleteScheduleAggregate(scheduleId, done, err); });
@@ -111,7 +121,6 @@ describe('/schedules/:scheduleId/users/:userId/candidates/:candidateId', () => {
     });
   });
 });
-
 function deleteScheduleAggregate(scheduleId, done, err) {
   Availability.findAll({
     where: { scheduleId: scheduleId }
@@ -123,10 +132,10 @@ function deleteScheduleAggregate(scheduleId, done, err) {
       }).then((candidates) => {
         const promises = candidates.map((c) => { return c.destroy(); });
         Promise.all(promises).then(() => {
-          Schedule.findByPk(scheduleId).then((s) => { 
-            s.destroy().then(() => { 
+          Schedule.findByPk(scheduleId).then((s) => {
+            s.destroy().then(() => {
               if (err) return done(err);
-              done(); 
+              done();
             });
           });
         });
@@ -134,3 +143,4 @@ function deleteScheduleAggregate(scheduleId, done, err) {
     });
   });
 }
+
